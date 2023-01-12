@@ -44,7 +44,7 @@ void dfs(int depth, int curr){
 
     FILE *gp;
     gp = fopen("foldertest.txt", "a");
-    fprintf(gp, "%d %s %s\n", procs[curr].pid, procs[curr].comm, path.c_str());
+    fprintf(gp, "%d %s%s\n", procs[curr].pid, procs[curr].comm, path.c_str());
     fclose(gp);
 
     // g << procs[curr].pid << " " << procs[curr].comm << path << "\n";
@@ -130,26 +130,6 @@ int do_getattr (const char *path, struct stat *stbuf){
         stbuf->st_mode = S_IFDIR | 0755;
     }
 
-    if(strcmp(path, "/my_file") == 0){
-        stbuf->st_mode = S_IFREG | 0644;
-    }
-
-    if(strcmp(path, "/my_directory") == 0){
-        stbuf->st_mode = S_IFDIR | 0755;
-    }
-
-    if(strcmp(path, "/my_directory/dir2") == 0){
-        stbuf->st_mode = S_IFDIR | 0755;
-    }
-
-    for(int i = 1; i <= 5; i ++){
-        char current[100] = "/dirfor";
-        char c = '0' + i - 1;
-        current[7] = c;
-        if(strcmp(path, current) == 0){
-            stbuf->st_mode = S_IFDIR | 0755;
-        }
-    }
     if(strcmp(path, "/proc") == 0){
         stbuf->st_mode = S_IFDIR | 0755;
     }
@@ -179,19 +159,7 @@ int do_readdir(const char *path, void *buf, fuse_fill_dir_t handler, off_t, stru
     static struct stat regular_file = {.st_mode = S_IFREG | 0644};
     static struct stat regular_directory = {.st_mode = S_IFDIR | 0755};
     if(strcmp(path, "/") == 0){
-        handler(buf, "my_file", &regular_file, 0);
-        handler(buf, "my_directory", &regular_directory, 0);
         handler(buf, "proc", &regular_directory, 0);
-        for(int i = 1; i <= 5; i ++){
-            char current[100] = "dirfor";
-            char c = '0' + i - 1;
-            current[6] = c;
-            handler(buf, current, &regular_directory, 0);
-    }
-    }
-
-    if(strcmp(path, "/my_directory") == 0){
-        handler(buf, "dir2", &regular_directory, 0);
     }
 
     for(int i = 0; i < elem; i ++){
@@ -251,19 +219,11 @@ int main(int argc, char * argv[]){
     // clear file foldertest.txt
     FILE *fp = fopen("foldertest.txt", "w");
     fclose(fp);
-    
+
     get_processes();
     printf("got em!\n");
     parse();
     printf("parsed em!\n");
-    for(auto i : procs[pid_to_index[1]].adjlist){
-        printf("%d ", i);
-    }
-    printf("\n");
-    for(auto i : procs[pid_to_index[2]].adjlist){
-        printf("%d ", i);
-    }
-    printf("\n");
     for(int i = 0; i < elem; i ++){
         path = "";
         dirpath.clear();
@@ -276,5 +236,5 @@ int main(int argc, char * argv[]){
 
 
 /*
-g++ m26.cpp -o m26 -g `pkg-config --libs --cflags fuse` --std=c++23
+g++ main.cpp -o procfs -g `pkg-config --libs --cflags fuse` --std=c++17 -pthread
 */
