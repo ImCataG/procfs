@@ -6,4 +6,4 @@ procfs: main.cpp
 	$(CC) main.cpp -o procfs  $(CFLAGS) $(LDFLAGS) 
 
 clean:
-	rm -rf procfs mnt foldertest.txt output.txt
+	rm -rf procfs foldertest.txt output.txt
