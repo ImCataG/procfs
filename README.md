@@ -8,4 +8,4 @@ You may need to install `libfuse-dev`.
 `make`
 
 # run
-`procfs folderToMountIn`
+`procfs folderToMountIn` or `procfs -d folderToMountIn` to run in FUSE debug mode
