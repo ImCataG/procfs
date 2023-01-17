@@ -13,7 +13,7 @@
 
 typedef int (*fuse_fill_dir_t) (void *buf, const char *name, const struct stat *stbuf, off_t off);
 
-int elem = 0;
+int elem = 0; // number of processes
 
 struct proc{
     int pid;
@@ -27,27 +27,24 @@ struct proc{
     std::vector<int> dirpath;
     std::string fullpath;
     std::string parentpath;
-} procs[10001]; // lista cu toate procesele si detalii
+} procs[10001]; // list of processes and details
 
-std::unordered_map<int, int> pid_to_index; // pentru a afla unde se afla in lista procs procesul cu un anume PID
+std::unordered_map<int, int> pid_to_index; // holds the index where a process with a specified pid is in the procs list
 
-std::string path;
-std::vector<int> dirpath;
 
-void dfs(int depth, int curr){ 
+std::vector<int> dirpath; // while doing dfs, dirpath is the path to a process directory, separated into vector elements
+std::string path; // while doing dfs, path holds the path to a process directory, as a string
+
+// FILE *gp; // file used for testing purposes
+
+void dfs(int depth, int curr){ // normal dfs where we assign the proper path to every single procees
     procs[curr].visited = true;
     auto prevpath = path;
     procs[curr].dirpath = dirpath;
     dirpath.push_back(curr);
 
-    // open file foldertext.txt for write
-
-    FILE *gp;
-    gp = fopen("foldertest.txt", "a");
-    fprintf(gp, "%d %s%s\n", procs[curr].pid, procs[curr].comm, path.c_str());
-    fclose(gp);
-
-    // g << procs[curr].pid << " " << procs[curr].comm << path << "\n";
+    // fprintf(gp, "%d %s%s\n", procs[curr].pid, procs[curr].comm, path.c_str());
+    
     procs[curr].parentpath = path;
     path += "/";
     path += std::__cxx11::to_string(procs[curr].pid);
@@ -66,7 +63,8 @@ void dfs(int depth, int curr){
 void get_processes(){
     char command[] = "ps -eo pid,ppid,ni,pcpu,pmem,comm:100 -H | grep -v grep | awk {'print $1\":\"$2\":\"$3\":\"$4\":\"$5\":\"; $1=\"\";$2=\"\";$3=\"\";$4=\"\";$5=\"\";print'} > output.txt";
     // the actual command: ps -eo pid,ppid,ni,pcpu,pmem,comm:100 -H | grep -v grep | awk {'print $1":"$2":"$3":"$4":"$5":"; $1="";$2="";$3="";$4="";$5="";print'} > output.txt
-    //execve(app, args, NULL);
+    // creates or overwrites file output.txt with data about all processes currently running
+    // uses grep and awk to format that data
 
     system(command);
 }
@@ -83,7 +81,7 @@ void parse(){
     if (fp == NULL)
         exit(EXIT_FAILURE);
 
-    while ((read = getline(&line, &len, fp)) != -1) {
+    while ((read = getline(&line, &len, fp)) != -1) { // read until end of file
         lineno += 1;
         char current[100];
         // printf("Retrieved line of length %zu: ", read);
@@ -91,8 +89,8 @@ void parse(){
         if(lineno == 1 || lineno == 2){
             continue;
         }
-        if (lineno % 2 == 1){
-            char *token = strtok(line, ":"); // separ in functie de ":", in formatul din output.txt
+        if (lineno % 2 == 1){ // odd lines contain details about a process
+            char *token = strtok(line, ":"); // data is separed by ':' in the file
             int i = 0;
             while(token != NULL){
                 // printf("%s\n", token);
@@ -103,7 +101,7 @@ void parse(){
                 if(i == 1 && atoi(token) != 0){
                     procs[elem].ppid = atoi(token);
                     procs[pid_to_index[atoi(token)]].adjlist.push_back(elem);
-		    // duc muchie de la parinte la copil pentru a face o reprezentare similara cu forest-ul din ps
+		        // creating edge from parent id node to child node in a directed graph, similar to --forest option in ps
                 }
                 if(i == 2){
                     strcpy(procs[elem].ni, token);
@@ -118,52 +116,57 @@ void parse(){
                 token = strtok(NULL, ":");
             }
         }
-        else{
+        else{ // even lines contain the command name of the process
             strcpy(procs[elem++].comm, line + 5);
         }
     }
     printf("%d processes.\n", elem);
 }
 
-int do_getattr (const char *path, struct stat *stbuf){
-    if(strcmp(path, "/") == 0){
+int do_getattr (const char *path, struct stat *stbuf){ // FUSE getattr function
+    if(strcmp(path, "/") == 0){ // the root directory, marked as a folder
         stbuf->st_mode = S_IFDIR | 0755;
-    }
+        return 0;
+    } 
 
-    if(strcmp(path, "/proc") == 0){
+    if(strcmp(path, "/proc") == 0){ // same for the proc directory
         stbuf->st_mode = S_IFDIR | 0755;
-    }
+        return 0;
+    } 
 
-    for(int i = 0; i < elem; i ++){
+    for(int i = 0; i < elem; i ++){ // all folders marked as folders
         char current[100] = "/proc";
         strcat(current, procs[i].fullpath.c_str());
         if(strcmp(path, current) == 0){
             stbuf->st_mode = S_IFDIR | 0755;
-        }
+            return 0;
+        } 
 
-        char current2[100] = "/proc";
+        char current2[100] = "/proc"; // all stats files marked as files
         strcat(current2, procs[i].fullpath.c_str());
         strcat(current2, "/stats");
         if(strcmp(path, current2) == 0){
             stbuf->st_mode = S_IFREG | 0644;
             stbuf->st_size = 1000;
-        }
+            return 0;
+        } 
     }
 
 
     return 0;
 }
 
-int do_readdir(const char *path, void *buf, fuse_fill_dir_t handler, off_t, struct fuse_file_info *fi){
+int do_readdir(const char *path, void *buf, fuse_fill_dir_t handler, off_t, struct fuse_file_info *fi){ // FUSE readdir function
 
-    static struct stat regular_file = {.st_mode = S_IFREG | 0644};
+    static struct stat regular_file = {.st_mode = S_IFREG | 0644}; 
     static struct stat regular_directory = {.st_mode = S_IFDIR | 0755};
-    if(strcmp(path, "/") == 0){
-        handler(buf, "proc", &regular_directory, 0);
-    }
 
-    for(int i = 0; i < elem; i ++){
-        char current[100] = "/proc";
+    if(strcmp(path, "/") == 0){ // creates the proc folder
+        handler(buf, "proc", &regular_directory, 0);
+    } 
+
+    for(int i = 0; i < elem; i ++){ // creates a folder for each process. since all parents come before their children in the process list,
+        char current[100] = "/proc"; // it will always work
         strcat(current, procs[i].parentpath.c_str());
         if(strcmp(path, current) == 0){
             char pid[100];
@@ -172,7 +175,7 @@ int do_readdir(const char *path, void *buf, fuse_fill_dir_t handler, off_t, stru
         }
     }
 
-    for(int i = 0; i < elem; i ++){
+    for(int i = 0; i < elem; i ++){ // creates the stats file inside each folder
         char current[100] = "/proc";
         strcat(current, procs[i].fullpath.c_str());
         if(strcmp(path, current) == 0){
@@ -183,15 +186,15 @@ int do_readdir(const char *path, void *buf, fuse_fill_dir_t handler, off_t, stru
     return 0;
 }
 
-int do_access(const char *path, int mode) {
-    printf("!!! ACCESS !!! %s\n", path);
+int do_access(const char *path, int mode) { // idk lmao
+    // printf("!!! ACCESS !!! %s\n", path);
     return 0;
 }
 
-int do_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi){
-    printf("!!! READ !!! %s\n", path);
+int do_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi){ // FUSE read function
+    // printf("!!! READ !!! %s\n", path);
 
-    for(int i = 0; i < elem; i ++){
+    for(int i = 0; i < elem; i ++){ // makes sure all stats files are filled with correct information
         char current[100] = "/proc";
         strcat(current, procs[i].fullpath.c_str());
         strcat(current, "/stats");
@@ -199,7 +202,7 @@ int do_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_
             char stats[1000];
             snprintf(stats, 1000, "pid: %d\nppid: %d\nni: %s\npcpu: %s\npmem: %s\ncomm: %s\n", procs[i].pid, procs[i].ppid, procs[i].ni, procs[i].pcpu, procs[i].pmem, procs[i].comm);
             memcpy(buf, stats, strlen(stats));
-            return strlen(stats);
+            return strlen(stats); // returns length of data that can be read from the file
         }
     }
     
@@ -217,20 +220,25 @@ static struct fuse_operations do_oper = {
 int main(int argc, char * argv[]){
     printf("starting!\n");
     // clear file foldertest.txt
-    FILE *fp = fopen("foldertest.txt", "w");
-    fclose(fp);
+    // gp = fopen("foldertest.txt", "w");
 
     get_processes();
     printf("got em!\n");
+
     parse();
     printf("parsed em!\n");
+
     for(int i = 0; i < elem; i ++){
         path = "";
         dirpath.clear();
         if(!procs[i].visited)
             dfs(0, i);
     }
-    printf("dfsd! check foldertest.txt\n\n");
+
+    // printf("dfsd!\n\n");
+
+    // fclose(gp);
+
     return fuse_main(argc, argv, &do_oper, NULL);
 }
 
